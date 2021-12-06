@@ -136,3 +136,25 @@ nhl_rink_plot() +
     panel.grid.minor = element_blank(),
     panel.border = element_blank()
   )
+
+
+# ------------------------------------------------------------------------------
+
+get_curve_data <- function(x, label) {
+  x %>%
+    collect_predictions(parameters = select_best(x, metric = "roc_auc")) %>%
+    roc_curve(on_goal, .pred_yes) %>%
+    mutate(model = label)
+}
+
+bind_rows(
+  get_curve_data(rpart_tune, "CART"),
+  get_curve_data(glmnet_tune, "glmnet"),
+  get_curve_data(ranger_tune, "Random Forest"),
+) %>%
+  ggplot(aes(x = 1 - specificity, y = sensitivity, col = model)) +
+  geom_abline(alpha = .3) +
+  geom_step() +
+  lims(x = 0:1, y = 0:1) +
+  coord_equal()
+
