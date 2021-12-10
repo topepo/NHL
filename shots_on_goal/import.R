@@ -108,7 +108,7 @@ shots_on_goal <-
     shot_angle,
     goals_away = goals.away,
     goals_home = goals.home,
-    team_home = home_team,
+    at_home = home_team,
     game_type = gameType,
     shooter = Shooter,
     period_type = periodType,
@@ -121,8 +121,9 @@ shots_on_goal <-
   mutate(
     shooter = gsub("([[:space:]])|([[:punct:]])", "_", tolower(shooter)),
     shooter = gsub("__", "_", shooter),
-    team_home = as.numeric(team == team_home),
-    team = gsub(" ", "_", tolower(team)),
+    at_home = as.numeric(team == at_home),
+    team = gsub("é", "e", tolower(team)),    team = gsub(" ", "_", team),
+    team = gsub("\\.", "", team),
     period_type = tolower(period_type),
     regular_season = as.numeric(game_type == "R"),
     behind_goal_line = as.numeric(abs(coord_x) >= 89)
