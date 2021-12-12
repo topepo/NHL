@@ -116,7 +116,8 @@ shots_on_goal <-
     gamePk,
     team = name,
     coord_x = x,
-    coord_y = y
+    coord_y = y,
+    game_id = gamePk
   ) %>%
   mutate(
     shooter = gsub("([[:space:]])|([[:punct:]])", "_", tolower(shooter)),
@@ -128,8 +129,8 @@ shots_on_goal <-
     regular_season = as.numeric(game_type == "R"),
     behind_goal_line = as.numeric(abs(coord_x) >= 89)
   ) %>%
-  arrange(gamePk, date_time) %>%
-  select(-shot_type, -date_time, -gamePk, -game_type) %>%
+  arrange(game_id, date_time) %>%
+  select(-shot_type, -game_type) %>%
   mutate(across(where(is.character), as.factor)) %>%
   relocate(on_goal)
 
