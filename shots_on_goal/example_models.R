@@ -17,9 +17,20 @@ load("shots_on_goal.RData")
 
 # ------------------------------------------------------------------------------
 
+tr_te_split <- initial_time_split(shots_on_goal, prop = 8 / 10)
+shots_train <- training(tr_te_split)
+shots_test  <- testing(tr_te_split)
+
 set.seed(1)
-val_split <- validation_split(shots_on_goal)
+val_split <- validation_split(shots_train, prop = 8 / 10)
+
+# Fake a split by time by subbing in the `in_id` values for the start of the data
+val_split$splits[[1]]$in_id <- 1:floor(nrow(shots_train) * 8 / 10)
+
+# ------------------------------------------------------------------------------
+
 grid_ctrl <- control_grid(parallel_over = "everything", save_pred = TRUE, save_workflow = TRUE)
+bay_ctrl <- control_bayes(parallel_over = "everything", save_pred = TRUE, save_workflow = TRUE, verbose = TRUE, no_improve = 20L)
 resamp_ctrl <- control_resamples(parallel_over = "everything", save_pred = TRUE, save_workflow = TRUE)
 
 cls_metrics <- metric_set(roc_auc, pr_auc, mn_log_loss, accuracy, sensitivity,
@@ -31,6 +42,8 @@ cls_metrics <- metric_set(roc_auc, pr_auc, mn_log_loss, accuracy, sensitivity,
 effects_encode_recipe <-
   recipe(formula = on_goal ~ ., data = shots_on_goal) %>%
   update_role(starts_with("coord"), new_role = "coordinates") %>%
+  update_role(game_id, new_role = "game_id") %>%
+  update_role(date_time, new_role = "game_date") %>%
   step_lencode_mixed(shooter, outcome = vars(on_goal))
 
 dummies_recipe <-
@@ -56,7 +69,7 @@ glmnet_workflow <-
 
 glmnet_grid <-
   tidyr::crossing(
-    penalty = 10 ^ seq(-6, -1, length.out = 20),
+    penalty = 10 ^ seq(-6, -1, length.out = 25),
     mixture = c(0.05, 0.2, 0.4, 0.6, 0.8, 1)
   )
 
@@ -78,22 +91,42 @@ lda_tune <-
 
 # ------------------------------------------------------------------------------
 
-parsnip:::mlp_num_weights(50, 20, 2)
+parsnip:::mlp_num_weights(50, 75, 2)
 
 mlp_spec <-
   mlp(hidden_units = tune(), penalty = tune(), epochs = tune()) %>%
   set_mode("classification") %>%
-  set_engine("nnet", MaxNWts = 1200)
+  set_engine("nnet", MaxNWts = 4000)
 
 mlp_workflow <-
   workflow() %>%
   add_recipe(normalized_recipe) %>%
   add_model(mlp_spec)
 
+mlp_param <-
+  mlp_workflow %>%
+  parameters() %>%
+  update(
+    hidden_units = hidden_units(c(2, 75)),
+    epochs = epochs(c(10, 5000))
+  )
+
+# mlp_res <-
+#   tune_bayes(
+#     mlp_workflow,
+#     resamples = val_split,
+#     initial = 10,
+#     iter = 25,
+#     param_info = mlp_param,
+#     control = bay_ctrl,
+#     metrics = cls_metrics
+#   )
+
 mlp_tune <-
   tune_grid(
     mlp_workflow,
     resamples = val_split,
+    param_info = mlp_param,
     grid = 25,
     control = grid_ctrl,
     metrics = cls_metrics
@@ -121,24 +154,24 @@ nb_tune <-
 
 # ------------------------------------------------------------------------------
 
-knn_spec <-
-  nearest_neighbor(neighbors = tune(), dist_power = tune(), weight_func = tune()) %>%
-  set_mode("classification")
-
-knn_workflow <-
-  workflow() %>%
-  add_recipe(normalized_recipe) %>%
-  add_model(knn_spec)
-
-set.seed(9264)
-knn_tune <-
-  tune_grid(
-    knn_workflow,
-    resamples = val_split,
-    grid = 10,
-    control = grid_ctrl,
-    metrics = cls_metrics
-  )
+# knn_spec <-
+#   nearest_neighbor(neighbors = tune(), dist_power = tune(), weight_func = tune()) %>%
+#   set_mode("classification")
+#
+# knn_workflow <-
+#   workflow() %>%
+#   add_recipe(normalized_recipe) %>%
+#   add_model(knn_spec)
+#
+# set.seed(9264)
+# knn_tune <-
+#   tune_grid(
+#     knn_workflow,
+#     resamples = val_split,
+#     grid = 10,
+#     control = grid_ctrl,
+#     metrics = cls_metrics
+#   )
 
 # ------------------------------------------------------------------------------
 
@@ -156,7 +189,7 @@ svm_tune <-
   tune_grid(
     svm_workflow,
     resamples = val_split,
-    grid = 10,
+    grid = 25,
     control = grid_ctrl,
     metrics = cls_metrics
   )
@@ -208,7 +241,7 @@ cart_tune <-
   set_mode("classification") %>%
   tune_grid(effects_encode_recipe,
             resamples = val_split,
-            grid = 20,
+            grid = 25,
             control = grid_ctrl,
             metrics = cls_metrics)
 
@@ -267,7 +300,7 @@ bag_c5_tune <-
 ranger_spec <-
   rand_forest(mtry = tune(),
               min_n = tune(),
-              trees = 1000) %>%
+              trees = 100) %>%   # just for screening
   set_mode("classification") %>%
   set_engine("ranger")
 
@@ -281,7 +314,7 @@ ranger_tune <-
   tune_grid(
     ranger_workflow,
     resamples = val_split,
-    grid = 30,
+    grid = 25,
     control = grid_ctrl,
     metrics = cls_metrics
   )
@@ -317,7 +350,7 @@ xgboost_tune <-
   tune_grid(
     xgboost_workflow,
     resamples = val_split,
-    grid = 30,
+    grid = 25,
     param_info = xgboost_param,
     control = grid_ctrl,
     metrics = cls_metrics
@@ -340,7 +373,7 @@ c5_boost_tune <-
   tune_grid(
     c5_boost_workflow,
     resamples = val_split,
-    grid = 30,
+    grid = 25,
     control = grid_ctrl,
     metrics = cls_metrics
   )
@@ -371,7 +404,7 @@ rule_fit_tune <-
   tune_grid(
     rule_fit_workflow,
     resamples = val_split,
-    grid = 30,
+    grid = 25,
     control = grid_ctrl,
     metrics = cls_metrics
   )
@@ -459,7 +492,7 @@ mods <- as_workflow_set(
   fda = fda_tune,
   gam = gam_tune,
   glmnet = glmnet_tune,
-  knn = knn_tune,
+  # knn = knn_tune,
   lda = lda_tune,
   nb = nb_tune,
   ranger = ranger_tune,
