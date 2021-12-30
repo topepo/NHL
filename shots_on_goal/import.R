@@ -122,12 +122,13 @@ shots_on_goal <-
   mutate(
     shooter = gsub("([[:space:]])|([[:punct:]])", "_", tolower(shooter)),
     shooter = gsub("__", "_", shooter),
+    shooter = ifelse(is.na(shooter), "unknown", shooter),
     at_home = as.numeric(team == at_home),
     team = gsub("é", "e", tolower(team)),    team = gsub(" ", "_", team),
     team = gsub("\\.", "", team),
     period_type = tolower(period_type),
     regular_season = as.numeric(game_type == "R"),
-    behind_goal_line = as.numeric(abs(coord_x) >= 89)
+    behind_goal_line = as.numeric(abs(coord_x) > 89)
   ) %>%
   arrange(game_id, date_time) %>%
   select(-shot_type, -game_type) %>%
@@ -147,7 +148,7 @@ NHL_red <- NHL_blue <- NHL_light_blue <- rgb(0, 0, 0, .2)
 set.seed(1)
 nhl_rink_plot() +
   geom_point(
-    data = shots_on_goal %>% sample_n(200),
+    data = shots_on_goal %>% filter(behind_goal_line == 1) %>% sample_n(200),
     aes(x = coord_x, y = coord_y, col = on_goal),
     alpha = .4,
     cex = 2
