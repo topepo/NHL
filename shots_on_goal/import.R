@@ -68,6 +68,10 @@ df_raw <-
 # Goal Line at x = 89 feet
 # Goal Width 3 ft (use 2.9999 ft to avoid NaN arctan result)
 # For shots from behind net (x > 89) assume shot from goal line x = 89
+# > Wikipedia:
+# > a shot on goal is a shot that directs the puck towards the net and either
+#>  goes into the net for a goal or is stopped by the goaltender for a save.
+
 
 
 # Pre-process Data
@@ -148,7 +152,7 @@ NHL_red <- NHL_blue <- NHL_light_blue <- rgb(0, 0, 0, .2)
 set.seed(1)
 nhl_rink_plot() +
   geom_point(
-    data = shots_on_goal %>% filter(behind_goal_line == 1) %>% sample_n(200),
+    data = shots_on_goal  %>% sample_n(1000),
     aes(x = coord_x, y = coord_y, col = on_goal),
     alpha = .4,
     cex = 2
